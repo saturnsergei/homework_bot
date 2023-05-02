@@ -39,7 +39,7 @@ logger.addHandler(handler)
 
 
 def check_tokens():
-    """Проверка переменных окружения"""
+    """Проверка переменных окружения."""
     if PRACTICUM_TOKEN is None:
         logger.critical(
             'Отсутствует обязательная переменная окружения: PRACTICUM_TOKEN')
@@ -58,7 +58,7 @@ def check_tokens():
 
 
 def send_message(bot, message):
-    """Отправка сообщений в telegram-чат"""
+    """Отправка сообщений в telegram-чат."""
     try:
         bot.send_message(TELEGRAM_CHAT_ID, message)
         logger.debug(f'Бот отправил сообщение "{message}"')
@@ -67,7 +67,7 @@ def send_message(bot, message):
 
 
 def get_api_answer(timestamp):
-    """Запрос к эндпоинту"""
+    """Запрос к эндпоинту."""
     payload = {'from_date': timestamp}
     try:
         response = requests.get(
@@ -87,7 +87,7 @@ def get_api_answer(timestamp):
 
 
 def check_response(response):
-    """Проверка ответа API"""
+    """Проверка ответа API."""
     if 'homeworks' not in response:
         logger.error('В ответе API отсутствует ключ homeworks')
         raise TypeError('В ответе API отсутствует ключ homeworks')
@@ -106,7 +106,7 @@ def check_response(response):
 
 
 def parse_status(homework):
-    """Извлечение статуса домашней работы"""
+    """Извлечение статуса домашней работы."""
     if homework.get('status') not in HOMEWORK_VERDICTS:
         logger.error('Неподдерживаемый статус работы')
         raise TypeError('Неподдерживаемый статус работы')
