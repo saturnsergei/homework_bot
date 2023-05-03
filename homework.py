@@ -1,12 +1,14 @@
-import os
-from dotenv import load_dotenv
+from http import HTTPStatus
 import logging
-import telegram
-import time
-import requests
+import os
 import sys
+import time
 
-from exceptions import UnvalidTokenError, ApiRequestError
+from dotenv import load_dotenv
+import telegram
+import requests
+
+from exceptions import ApiRequestError
 
 
 load_dotenv()
@@ -43,23 +45,23 @@ def check_tokens():
     if PRACTICUM_TOKEN is None:
         logger.critical(
             'Отсутствует обязательная переменная окружения: PRACTICUM_TOKEN')
-        raise UnvalidTokenError(
-            'Отсутствует обязательная переменная окружения: PRACTICUM_TOKEN')
+        sys.exit(1)
+
     if TELEGRAM_TOKEN is None:
         logger.critical(
             'Отсутствует обязательная переменная окружения: TELEGRAM_TOKEN')
-        raise UnvalidTokenError(
-            'Отсутствует обязательная переменная окружения: TELEGRAM_TOKEN')
+        sys.exit(1)
+
     if TELEGRAM_CHAT_ID is None:
         logger.critical(
             'Отсутствует обязательная переменная окружения: TELEGRAM_CHAT_ID')
-        raise UnvalidTokenError(
-            'Отсутствует обязательная переменная окружения: TELEGRAM_CHAT_ID')
+        sys.exit(1)
 
 
 def send_message(bot, message):
     """Отправка сообщений в telegram-чат."""
     try:
+        logger.debug(f'Попытка отправить сообщение "{message}"')
         bot.send_message(TELEGRAM_CHAT_ID, message)
         logger.debug(f'Бот отправил сообщение "{message}"')
     except Exception:
@@ -70,17 +72,18 @@ def get_api_answer(timestamp):
     """Запрос к эндпоинту."""
     payload = {'from_date': timestamp}
     try:
+        logger.debug('Попытка запроса к эндпоинту.')
         response = requests.get(
             ENDPOINT, headers=HEADERS, params=payload)
 
-        if response.status_code != 200:
+        if response.status_code != HTTPStatus.OK:
             raise ApiRequestError(
                 (f'Сбой запроса при обращении к эндпоинту. '
                  f'Код ответа API: {response.status_code}'))
         return response.json()
     except Exception as error:
         logger.error(f'Ошибка при запросе к основному API: {error}')
-        if response.status_code != 200:
+        if response.status_code != HTTPStatus.OK:
             raise ApiRequestError(
                 (f'Сбой запроса при обращении к эндпоинту. '
                  f'Код ответа API: {response.status_code}'))
@@ -88,16 +91,16 @@ def get_api_answer(timestamp):
 
 def check_response(response):
     """Проверка ответа API."""
-    if 'homeworks' not in response:
-        logger.error('В ответе API отсутствует ключ homeworks')
-        raise TypeError('В ответе API отсутствует ключ homeworks')
-    if 'current_date' not in response:
-        logger.error('В ответе API отсутствует ключ current_date')
-        raise TypeError('В ответе API отсутствует ключ current_date')
+    if not isinstance(response, dict):
+        raise TypeError(
+            'Ответ API имеет некорректный тип данных')
+
+    if 'homeworks' not in response.keys():
+        raise KeyError('В ответе API отсутствует ключ homeworks')
+    if 'current_date' not in response.keys():
+        raise KeyError('В ответе API отсутствует ключ current_date')
 
     if not isinstance(response.get('homeworks'), list):
-        logger.error(
-            'В ответе API ключ homeworks имеет некорректный тип данных')
         raise TypeError(
             'В ответе API ключ homeworks имеет некорректный тип данных')
 
@@ -108,10 +111,9 @@ def check_response(response):
 def parse_status(homework):
     """Извлечение статуса домашней работы."""
     if homework.get('status') not in HOMEWORK_VERDICTS:
-        logger.error('Неподдерживаемый статус работы')
-        raise TypeError('Неподдерживаемый статус работы')
+        raise KeyError('Неподдерживаемый статус работы')
     if 'homework_name' not in homework:
-        raise TypeError('В ответе API отсутствует ключ homework_name')
+        raise KeyError('В ответе API отсутствует ключ homework_name')
 
     homework_name = homework.get('homework_name')
     status = homework.get('status')
@@ -144,7 +146,8 @@ def main():
                 last_error = message
                 send_message(bot, message)
 
-        time.sleep(RETRY_PERIOD)
+        finally:
+            time.sleep(RETRY_PERIOD)
 
 
 if __name__ == '__main__':
