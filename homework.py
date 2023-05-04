@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 import telegram
 import requests
 
-from exceptions import ApiRequestError
+from exceptions import ApiRequestError, TokenNotFoundError
 
 
 load_dotenv()
@@ -43,19 +43,16 @@ logger.addHandler(handler)
 def check_tokens():
     """Проверка переменных окружения."""
     if PRACTICUM_TOKEN is None:
-        logger.critical(
+        raise TokenNotFoundError(
             'Отсутствует обязательная переменная окружения: PRACTICUM_TOKEN')
-        sys.exit(1)
 
     if TELEGRAM_TOKEN is None:
-        logger.critical(
+        raise TokenNotFoundError(
             'Отсутствует обязательная переменная окружения: TELEGRAM_TOKEN')
-        sys.exit(1)
 
     if TELEGRAM_CHAT_ID is None:
-        logger.critical(
+        raise TokenNotFoundError(
             'Отсутствует обязательная переменная окружения: TELEGRAM_CHAT_ID')
-        sys.exit(1)
 
 
 def send_message(bot, message):
@@ -82,11 +79,11 @@ def get_api_answer(timestamp):
                  f'Код ответа API: {response.status_code}'))
         return response.json()
     except Exception as error:
-        logger.error(f'Ошибка при запросе к основному API: {error}')
         if response.status_code != HTTPStatus.OK:
             raise ApiRequestError(
                 (f'Сбой запроса при обращении к эндпоинту. '
                  f'Код ответа API: {response.status_code}'))
+        raise ApiRequestError(f'Ошибка при запросе к основному API: {error}')
 
 
 def check_response(response):
@@ -110,9 +107,9 @@ def check_response(response):
 
 def parse_status(homework):
     """Извлечение статуса домашней работы."""
-    if homework.get('status') not in HOMEWORK_VERDICTS:
+    if homework.get('status') not in HOMEWORK_VERDICTS.keys():
         raise KeyError('Неподдерживаемый статус работы')
-    if 'homework_name' not in homework:
+    if 'homework_name' not in homework.keys():
         raise KeyError('В ответе API отсутствует ключ homework_name')
 
     homework_name = homework.get('homework_name')
@@ -127,9 +124,10 @@ def main():
     bot = telegram.Bot(token=TELEGRAM_TOKEN)
     timestamp = int(time.time())
     logger.debug('Бот запущен')
-    check_tokens()
+
     while True:
         try:
+            check_tokens()
             response = get_api_answer(timestamp)
             check_response(response)
             homeworks = response.get('homeworks')
@@ -138,6 +136,11 @@ def main():
                 send_message(bot, telegram_message)
 
             timestamp = response.get('current_date')
+            time.sleep(RETRY_PERIOD)
+
+        except TokenNotFoundError as error:
+            logger.critical(error)
+            sys.exit(1)
 
         except Exception as error:
             message = f'Сбой в работе программы: {error}'
@@ -145,8 +148,6 @@ def main():
             if last_error != message:
                 last_error = message
                 send_message(bot, message)
-
-        finally:
             time.sleep(RETRY_PERIOD)
 
 
